@@ -28,38 +28,38 @@ gdrcopy_loader(void)
 
 	gdrclib = dlopen(gdrcopy_path, RTLD_LAZY);
 	if (gdrclib == NULL) {
-		rte_cuda_log(ERR, "Failed to find GDRCopy library %s (GDRCOPY_PATH_L=%s)\n",
+		rte_cuda_log(ERR, "Failed to find GDRCopy library %s (GDRCOPY_PATH_L=%s)",
 				gdrcopy_path, getenv("GDRCOPY_PATH_L"));
 		return -1;
 	}
 
 	sym_gdr_open = dlsym(gdrclib, "gdr_open");
 	if (sym_gdr_open == NULL) {
-		rte_cuda_log(ERR, "Failed to load GDRCopy symbols\n");
+		rte_cuda_log(ERR, "Failed to load GDRCopy symbols");
 		return -1;
 	}
 
 	sym_gdr_pin_buffer = dlsym(gdrclib, "gdr_pin_buffer");
 	if (sym_gdr_pin_buffer == NULL) {
-		rte_cuda_log(ERR, "Failed to load GDRCopy symbols\n");
+		rte_cuda_log(ERR, "Failed to load GDRCopy symbols");
 		return -1;
 	}
 
 	sym_gdr_unpin_buffer = dlsym(gdrclib, "gdr_unpin_buffer");
 	if (sym_gdr_unpin_buffer == NULL) {
-		rte_cuda_log(ERR, "Failed to load GDRCopy symbols\n");
+		rte_cuda_log(ERR, "Failed to load GDRCopy symbols");
 		return -1;
 	}
 
 	sym_gdr_map = dlsym(gdrclib, "gdr_map");
 	if (sym_gdr_map == NULL) {
-		rte_cuda_log(ERR, "Failed to load GDRCopy symbols\n");
+		rte_cuda_log(ERR, "Failed to load GDRCopy symbols");
 		return -1;
 	}
 
 	sym_gdr_unmap = dlsym(gdrclib, "gdr_unmap");
 	if (sym_gdr_unmap == NULL) {
-		rte_cuda_log(ERR, "Failed to load GDRCopy symbols\n");
+		rte_cuda_log(ERR, "Failed to load GDRCopy symbols");
 		return -1;
 	}
 
