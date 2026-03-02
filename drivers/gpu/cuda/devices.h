@@ -38,6 +38,9 @@
 #define NVIDIA_GPU_V100_32GB_SXM3_DEVICE_ID (0x1db8)
 #define NVIDIA_GPU_V100_32GB_SXM3_H_DEVICE_ID (0x131d)
 
+// adding support for my GPU, Hopper H100
+#define NVIDIA_GPU_HOPPER_H100_DEVICE_ID (0x2331)
+
 #define NVIDIA_GPU_V100_SXM2 (0x1df5)
 #define NVIDIA_GPU_V100S_PCIE (0x1df6)
 
