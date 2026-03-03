@@ -267,6 +267,10 @@ static const struct rte_pci_id pci_id_cuda_map[] = {
 				NVIDIA_GPU_HOPPER_H100_DEVICE_ID)
 	},
 	{
+		RTE_PCI_DEVICE(NVIDIA_GPU_VENDOR_ID,
+				NVIDIA_GPU_TESLA_V100_DEVICE_ID)
+	},
+	{
 		.device_id = 0
 	}
 };
