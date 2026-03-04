@@ -141,28 +141,82 @@ def _sanitize(s: str) -> str:
     return s.upper().strip('_')
 
 
-def make_macro(dev_id: int, pcidb: dict, okm: dict) -> tuple:
-    """
-    Return (macro_name, device_id_hex, comment) for a device ID.
-    """
-    dev_hex = f"0x{dev_id:04x}"
+# def make_macro(dev_id: int, pcidb: dict, okm: dict) -> tuple:
+#     """
+#     Return (macro_name, device_id_hex, comment) for a device ID.
+#     """
+#     dev_hex = f"0x{dev_id:04x}"
 
-    if dev_id in pcidb:
-        arch, desc = pcidb[dev_id]
-        if dev_id in okm:
-            macro   = f"NVIDIA_GPU_{_sanitize(arch)}"
-            comment = desc
+#     if dev_id in pcidb:
+#         arch, desc = pcidb[dev_id]
+#         if dev_id in okm:
+#             macro   = f"NVIDIA_GPU_{_sanitize(arch)}"
+#             comment = desc
+#         else:
+#             macro   = f"NVIDIA_GPU_{_sanitize(arch)}_{_sanitize(desc)}"
+#             comment = desc
+#     elif dev_id in okm:
+#         macro   = "NVIDIA_GPU_" + _sanitize(okm[dev_id])
+#         comment = okm[dev_id]
+#     else:
+#         macro   = f"NVIDIA_GPU_{dev_hex.upper().replace('0X', '')}"
+#         comment = "unknown"
+
+#     return macro, dev_hex, comment
+
+def build_entries(all_ids: list, pcidb: dict, okm: dict) -> list:
+    """
+    Build (macro, dev_hex, comment) entries for all device IDs.
+    Two-pass: first generate candidate names, then resolve collisions
+    by appending sanitized description suffix.
+    """
+
+    candidates = []
+    for dev_id in all_ids:
+        dev_hex = f"0x{dev_id:04x}"
+        if dev_id in pcidb:
+            arch, desc = pcidb[dev_id]
+            if dev_id in okm:
+                macro   = f"NVIDIA_GPU_{_sanitize(arch)}"
+                comment = desc
+            else:
+                macro   = f"NVIDIA_GPU_{_sanitize(arch)}_{_sanitize(desc)}"
+                comment = desc
+        elif dev_id in okm:
+            macro   = "NVIDIA_GPU_" + _sanitize(okm[dev_id])
+            comment = okm[dev_id]
         else:
-            macro   = f"NVIDIA_GPU_{_sanitize(arch)}_{_sanitize(desc)}"
-            comment = desc
-    elif dev_id in okm:
-        macro   = "NVIDIA_GPU_" + _sanitize(okm[dev_id])
-        comment = okm[dev_id]
-    else:
-        macro   = f"NVIDIA_GPU_{dev_hex.upper().replace('0X', '')}"
-        comment = "unknown"
+            macro   = f"NVIDIA_GPU_{dev_hex.upper().replace('0X', '')}"
+            comment = "unknown"
+        candidates.append((macro, dev_hex, comment, dev_id))
 
-    return macro, dev_hex, comment
+    from collections import Counter
+    name_counts = Counter(macro for macro, _, _, _ in candidates)
+
+    resolved_names = Counter()
+
+    entries = []
+    for macro, dev_hex, comment, dev_id in candidates:
+        if name_counts[macro] > 1:
+            if dev_id in pcidb:
+                _, desc = pcidb[dev_id]
+                suffix = _sanitize(desc)
+            elif dev_id in okm:
+                suffix = _sanitize(okm[dev_id])
+            else:
+                suffix = dev_hex.upper().replace("0X", "")
+
+            unique_macro = f"{macro}_{suffix}"
+        else:
+            unique_macro = macro
+
+        resolved_names[unique_macro] += 1
+        if resolved_names[unique_macro] > 1:
+            unique_macro = f"{unique_macro}_{dev_hex.upper().replace('0X', '')}"
+
+        entries.append((unique_macro, dev_hex, comment))
+
+    return entries
 
 
 def generate_pci_map_block(entries: list) -> str:
@@ -320,8 +374,8 @@ def main():
     all_ids = sorted(set(okm.keys()) | set(pcidb.keys()))
     print(f"  {len(all_ids)} total unique device IDs after merge", file=sys.stderr)
 
-    entries = [make_macro(dev_id, pcidb, okm) for dev_id in all_ids]
-
+    #entries = [make_macro(dev_id, pcidb, okm) for dev_id in all_ids]
+    entries = build_entries(all_ids, pcidb, okm)
 
     sync_time  = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     new_content = generate_header(entries, okm_sha, pci_sha, sync_time)
