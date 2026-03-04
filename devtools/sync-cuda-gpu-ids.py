@@ -22,6 +22,8 @@ PCIDB_URL           = ("https://raw.githubusercontent.com/pciutils/"
 USER_AGENT          = "dpdk-sync-cuda-gpu-ids/1.0 (DPDK devtool; https://dpdk.org)"
 DEVICES_H_PATH      = os.path.join(os.path.dirname(__file__),
                                    "..", "drivers", "gpu", "cuda", "devices.h")
+CUDA_C_PATH = os.path.join(os.path.dirname(__file__),
+                           "..", "drivers", "gpu", "cuda", "cuda.c")
 
 LICENSE_HEADER = """\
 /* SPDX-License-Identifier: BSD-3-Clause
@@ -62,6 +64,13 @@ OKM_ENTRY_RE = re.compile(
     r'"([^"]+)"'
     r'\s*\}',
     re.IGNORECASE
+)
+
+CUDA_MAP_RE = re.compile(
+    r'(static const struct rte_pci_id pci_id_cuda_map\[\] = \{)'
+    r'.*?'
+    r'\n\t\{\n\t\t\.device_id = 0\n\t\}\n\};',
+    re.DOTALL
 )
 
 def parse_okm(content: str) -> dict:
@@ -126,11 +135,8 @@ def parse_pcidb(content: str) -> dict:
 
 def _sanitize(s: str) -> str:
     """Convert a description string to an uppercase C macro fragment."""
-    # Replace common separators with underscore
     s = re.sub(r'[\s\-/\.\[\]]+', '_', s)
-    # Remove characters not valid in a C identifier
     s = re.sub(r'[^A-Za-z0-9_]', '', s)
-    # Collapse multiple underscores
     s = re.sub(r'_+', '_', s)
     return s.upper().strip('_')
 
@@ -144,23 +150,31 @@ def make_macro(dev_id: int, pcidb: dict, okm: dict) -> tuple:
     if dev_id in pcidb:
         arch, desc = pcidb[dev_id]
         if dev_id in okm:
-            # Short form: arch name only
             macro   = f"NVIDIA_GPU_{_sanitize(arch)}"
             comment = desc
         else:
-            # Long form: arch + sanitized description
             macro   = f"NVIDIA_GPU_{_sanitize(arch)}_{_sanitize(desc)}"
             comment = desc
     elif dev_id in okm:
-        # Only in OKM — derive name from OKM canonical name
         macro   = "NVIDIA_GPU_" + _sanitize(okm[dev_id])
         comment = okm[dev_id]
     else:
-        # Should not happen in normal flow
         macro   = f"NVIDIA_GPU_{dev_hex.upper().replace('0X', '')}"
         comment = "unknown"
 
     return macro, dev_hex, comment
+
+
+def generate_pci_map_block(entries: list) -> str:
+    """Generate the pci_id_cuda_map[] entries for cuda.c."""
+    lines = []
+    for macro, dev_hex, comment in entries:
+        lines.append("\t{")
+        lines.append(f"\t\tRTE_PCI_DEVICE(NVIDIA_GPU_VENDOR_ID,")
+        lines.append(f"\t\t\t\t{macro})")
+        lines.append("\t},")
+
+    return "\n".join(lines)
 
 
 def generate_header(entries: list, okm_sha: str, pci_sha: str,
@@ -209,6 +223,38 @@ def generate_header(entries: list, okm_sha: str, pci_sha: str,
     return "\n".join(lines)
 
 
+def update_cuda_c(entries: list, path: str, dry_run: bool = False, diff: bool = False):
+    with open(path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    block = generate_pci_map_block(entries)
+    replacement = f"\\1\n{block}\n\t{{\n\t\t.device_id = 0\n\t}}\n}};"
+    new_content, count = CUDA_MAP_RE.subn(replacement, content)
+
+    if count == 0:
+        print("WARNING: Could not locate pci_id_cuda_map[] in cuda.c. "
+              "File not modified.", file=sys.stderr)
+        return
+
+    if diff:
+        show_diff(content, new_content)
+        return
+
+    if dry_run:
+        print("\n--- cuda.c (new) ---")
+        print(new_content)
+        return
+
+    if new_content == content:
+        print("cuda.c is already up to date. Nothing to do.", file=sys.stderr)
+        return
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(new_content)
+    print(f"Updated pci_id_cuda_map in {path}", file=sys.stderr)
+
+
+
 def show_diff(old: str, new: str):
     """Print a simple added/removed line diff."""
     import difflib
@@ -234,6 +280,8 @@ def main():
                         help="Use local pci.ids instead of fetching from internet")
     parser.add_argument("--output", metavar="PATH", default=DEVICES_H_PATH,
                         help=f"Output path (default: {DEVICES_H_PATH})")
+    parser.add_argument("--cuda-c", metavar="PATH", default=CUDA_C_PATH,
+                        help=f"Path to cuda.c (default: {CUDA_C_PATH})")
     args = parser.parse_args()
 
     if args.diff:
@@ -247,7 +295,7 @@ def main():
     else:
         print("Fetching OKM header from GitHub...", file=sys.stderr)
         okm_content = fetch_url(OKM_URL)
-        okm_sha     = None  # could be extended to query GitHub API for SHA
+        okm_sha     = None
 
     if args.pci_file:
         print(f"WARNING: Reading PCI DB from local file '{args.pci_file}'. "
@@ -259,6 +307,7 @@ def main():
         pci_content = fetch_url(PCIDB_URL)
         pci_sha     = None
 
+    cuda_c = args.cuda_c if hasattr(args, 'cuda_c') else CUDA_C_PATH
 
     print("Parsing OKM entries...", file=sys.stderr)
     okm   = parse_okm(okm_content)
@@ -280,7 +329,6 @@ def main():
     if not args.dry_run and os.path.exists(args.output):
         with open(args.output, "r", encoding="utf-8") as f:
             current = f.read()
-        # Strip sync timestamp line for comparison (it always changes)
         def strip_timestamp(s):
             return re.sub(r'\* Last sync\s*:.*', '', s)
         if strip_timestamp(current) == strip_timestamp(new_content):
@@ -291,15 +339,20 @@ def main():
         with open(args.output, "r", encoding="utf-8") as f:
             current = f.read()
         show_diff(current, new_content)
+        update_cuda_c(entries, cuda_c, dry_run=False, diff=True)
         return
 
     if args.dry_run:
         print(new_content)
+        update_cuda_c(entries, cuda_c, dry_run=True, diff=False)
         return
 
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
     with open(args.output, "w", encoding="utf-8") as f:
         f.write(new_content)
+
+    update_cuda_c(entries, cuda_c, dry_run=args.dry_run, diff=args.diff)
+
     print(f"Written to {args.output}", file=sys.stderr)
 
 
