@@ -341,6 +341,7 @@ def main():
     sync_time  = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     new_content = generate_header(entries, okm_sha, pci_sha, sync_time)
 
+    devices_h_changed = True
     if not args.dry_run and os.path.exists(args.output):
         with open(args.output, "r", encoding="utf-8") as f:
             current = f.read()
@@ -348,7 +349,14 @@ def main():
             return re.sub(r'\* Last sync\s*:.*', '', s)
         if strip_timestamp(current) == strip_timestamp(new_content):
             print("devices.h is already up to date. Nothing to do.", file=sys.stderr)
-            sys.exit(0)
+            devices_h_changed = False
+
+    # It's possible that devices.h is in sync, but cuda.c is not
+    # this avoids the mistake of assuming both are in sync, if 
+    # devices.h is in sync.
+    if not args.dry_run and not devices_h_changed:
+        update_cuda_c(entries, cuda_c, dry_run=False, diff=False)
+        sys.exit(0)
 
     if args.diff and os.path.exists(args.output):
         with open(args.output, "r", encoding="utf-8") as f:
