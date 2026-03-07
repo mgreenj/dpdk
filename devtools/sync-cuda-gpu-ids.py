@@ -25,6 +25,8 @@ DEVICES_H_PATH      = os.path.join(os.path.dirname(__file__),
 CUDA_C_PATH = os.path.join(os.path.dirname(__file__),
                            "..", "drivers", "gpu", "cuda", "cuda.c")
 
+DEVICES_MARKER = "/* NVIDIA GPU device IDs */"
+
 LICENSE_HEADER = """\
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES
@@ -208,20 +210,23 @@ def generate_pci_map_block(entries: list) -> str:
     return "\n".join(lines)
 
 
-def generate_header(entries: list, okm_sha: str, pci_sha: str,
-                    sync_time: str) -> str:
-    """
-    Generate the full devices.h content.
-    entries: list of (macro, dev_hex, comment) sorted by device id
-    """
+def update_devices_h(entries: list, path: str, okm_sha: str,
+                     pci_sha: str, sync_time: str, dry_run: bool = False,
+                     diff: bool = False) -> bool:
+    """Update only the device ID defines in devices.h, preserving the header."""
+    with open(path, "r", encoding="utf-8") as f:
+        current = f.read()
+
+    marker_pos = current.find(DEVICES_MARKER)
+    if marker_pos == -1:
+        print("WARNING: Could not find device ID marker in devices.h",
+              file=sys.stderr)
+        return False
+
+    static_header = current[:marker_pos]
+
     lines = []
-
-    lines.append(LICENSE_HEADER)
-
-    lines.append("")
-    lines.append("#ifndef _CUDA_GPU_DEVICES_H_")
-    lines.append("#define _CUDA_GPU_DEVICES_H_")
-    lines.append("")
+    lines.append(DEVICES_MARKER)
 
     if entries:
         max_macro = max(len(e[0]) for e in entries)
@@ -233,10 +238,30 @@ def generate_header(entries: list, okm_sha: str, pci_sha: str,
         lines.append(f"#define {macro}{pad}{dev_hex}  /* {comment} */")
 
     lines.append("")
-    lines.append("#endif /* _CUDA_GPU_DEVICES_H_ */")
+    lines.append("#endif /* CUDA_DEVICES_H */")
     lines.append("")
 
-    return "\n".join(lines)
+    new_content = static_header + "\n".join(lines)
+
+    if diff and os.path.exists(path):
+        show_diff(current, new_content)
+        return True
+
+    if dry_run:
+        print(new_content)
+        return True
+
+    def strip_timestamp(s):
+        return re.sub(r'\* Last sync\s*:.*', '', s)
+
+    if strip_timestamp(current) == strip_timestamp(new_content):
+        print("devices.h is already up to date.", file=sys.stderr)
+        return False
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(new_content)
+    print(f"Written to {path}", file=sys.stderr)
+    return True
 
 
 def update_cuda_c(entries: list, path: str, dry_run: bool = False, diff: bool = False):
@@ -339,40 +364,12 @@ def main():
     entries = build_entries(all_ids, pcidb, okm)
 
     sync_time  = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    new_content = generate_header(entries, okm_sha, pci_sha, sync_time)
+    cuda_c = args.cuda_c if hasattr(args, 'cuda_c') else CUDA_C_PATH
 
-    devices_h_changed = True
-    if not args.dry_run and os.path.exists(args.output):
-        with open(args.output, "r", encoding="utf-8") as f:
-            current = f.read()
-        def strip_timestamp(s):
-            return re.sub(r'\* Last sync\s*:.*', '', s)
-        if strip_timestamp(current) == strip_timestamp(new_content):
-            print("devices.h is already up to date. Nothing to do.", file=sys.stderr)
-            devices_h_changed = False
-
-    # It's possible that devices.h is in sync, but cuda.c is not
-    # this avoids the mistake of assuming both are in sync, if 
-    # devices.h is in sync.
-    if not args.dry_run and not devices_h_changed:
-        update_cuda_c(entries, cuda_c, dry_run=False, diff=False)
-        sys.exit(0)
-
-    if args.diff and os.path.exists(args.output):
-        with open(args.output, "r", encoding="utf-8") as f:
-            current = f.read()
-        show_diff(current, new_content)
-        update_cuda_c(entries, cuda_c, dry_run=False, diff=True)
-        return
-
-    if args.dry_run:
-        print(new_content)
-        update_cuda_c(entries, cuda_c, dry_run=True, diff=False)
-        return
-
-    os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
-    with open(args.output, "w", encoding="utf-8") as f:
-        f.write(new_content)
+    devices_changed = update_devices_h(
+        entries, args.output, okm_sha, pci_sha, sync_time,
+        dry_run=args.dry_run, diff=args.diff
+    )
 
     update_cuda_c(entries, cuda_c, dry_run=args.dry_run, diff=args.diff)
 

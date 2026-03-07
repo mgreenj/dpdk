@@ -1,11 +1,15 @@
 /* SPDX-License-Identifier: BSD-3-Clause
- * Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES
+ * Copyright (c) 2022 NVIDIA Corporation & Affiliates
  */
 
 
 #ifndef _CUDA_GPU_DEVICES_H_
 #define _CUDA_GPU_DEVICES_H_
 
+/* NVIDIA GPU vendor */
+#define NVIDIA_GPU_VENDOR_ID (0x10de)
+
+/* NVIDIA GPU device IDs */
 #define NVIDIA_GPU_NV1_STG2000X_B_SERIES                                                                                   0x0008  /* STG2000X-B Series */
 #define NVIDIA_GPU_NV1_NV1_SERIES                                                                                          0x0009  /* NV1 Series */
 #define NVIDIA_GPU_NV3_RIVA_128                                                                                            0x0018  /* Riva 128 */
@@ -1973,4 +1977,4 @@
 #define NVIDIA_GPU_GB112_GB112_GB112_323E                                                                                  0x323e  /* GB112 */
 #define NVIDIA_GPU_GB120_GB120                                                                                             0x3340  /* GB120 */
 
-#endif /* _CUDA_GPU_DEVICES_H_ */
+#endif /* CUDA_DEVICES_H */
