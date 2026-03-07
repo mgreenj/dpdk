@@ -201,7 +201,7 @@ def generate_pci_map_block(entries: list) -> str:
     lines = []
     for macro, dev_hex, comment in entries:
         lines.append("\t{")
-        lines.append(f"\t\tRTE_PCI_DEVICE(NVIDIA_GPU_VENDOR_ID,")
+        lines.append(f"\t\tRTE_PCI_DEVICE(NVIDIA_VENDOR_ID,")
         lines.append(f"\t\t\t\t{macro})")
         lines.append("\t},")
 
