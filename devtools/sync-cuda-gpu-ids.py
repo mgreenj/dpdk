@@ -13,7 +13,7 @@ import urllib.request
 from datetime import datetime, timezone
 
 
-NVIDIA_VENDOR_ID    = "10de"
+NVIDIA_GPU_VENDOR_ID    = "10de"
 OKM_URL             = ("https://raw.githubusercontent.com/NVIDIA/"
                        "open-gpu-kernel-modules/refs/heads/main/src/"
                        "nvidia/generated/g_nv_name_released.h")
@@ -102,7 +102,7 @@ def parse_pcidb(content: str) -> dict:
             m = vendor_re.match(line)
             if m:
                 vid = m.group(1).lower()
-                if vid == NVIDIA_VENDOR_ID:
+                if vid == NVIDIA_GPU_VENDOR_ID:
                     in_nvidia = True
                 elif in_nvidia:
                     break
@@ -201,7 +201,7 @@ def generate_pci_map_block(entries: list) -> str:
     lines = []
     for macro, dev_hex, comment in entries:
         lines.append("\t{")
-        lines.append(f"\t\tRTE_PCI_DEVICE(NVIDIA_VENDOR_ID,")
+        lines.append(f"\t\tRTE_PCI_DEVICE(NVIDIA_GPU_VENDOR_ID,")
         lines.append(f"\t\t\t\t{macro})")
         lines.append("\t},")
 

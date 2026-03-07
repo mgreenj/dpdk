@@ -21,7 +21,7 @@ DEFINE_RE = re.compile(
 )
 
 PCI_MAP_RE = re.compile(
-    r'RTE_PCI_DEVICE\s*\(\s*NVIDIA_VENDOR_ID\s*,\s*(NVIDIA_GPU_\w+)\s*\)'
+    r'RTE_PCI_DEVICE\s*\(\s*NVIDIA_GPU_VENDOR_ID\s*,\s*(NVIDIA_GPU_\w+)\s*\)'
 )
 
 
